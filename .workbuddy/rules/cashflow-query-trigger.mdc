@@ -1,0 +1,77 @@
+---
+description: 
+alwaysApply: true
+enabled: true
+updatedAt: 2026-03-15T08:55:41.634Z
+provider: 
+---
+
+# 现金流查询 & 深度分析 Pipeline 规则
+
+工作目录：`C:\Users\Lenovo\WorkBuddy\20260311213700`
+
+---
+
+## 触发一：XX的历史现金流（快速图表）
+
+**触发格式**：`XX的历史现金流`（XX 为股票代码或公司名称）
+
+执行：
+```bash
+cd C:\Users\Lenovo\WorkBuddy\20260311213700
+python cashflow_query.py <股票代码>
+```
+
+- 脚本自动补全交易所后缀（6/9 开头→.SH，0/3/2 开头→.SZ，4/8 开头→.BJ）
+- 输出 `cashflow_{代码}.png`，执行完毕后用 `open_result_view` 展示图片
+
+---
+
+## 触发二：深度分析XX的现金流 / 现金流研判XX（四步 Pipeline）
+
+**触发格式**（满足其一即触发）：
+- `深度分析XX的现金流`
+- `现金流研判XX`
+- `XX现金流深度分析`
+- `对XX做现金流pipeline`
+
+执行四步 Pipeline（全部在项目目录下运行）：
+
+**Step 1 — 数据获取**
+```bash
+python skill1_cashflow_fetch.py <股票代码或名称>
+```
+输出：`data/{代码}_step1_cashflow.csv`
+
+**Step 2 — 八种组合框架分类**
+```bash
+python skill2_cashflow_classify.py <ts_code>
+```
+输出：`data/{代码}_step2_classified.csv`
+
+**Step 3 — 并购/重组事件获取**
+```bash
+python skill3_ma_events_fetch.py <ts_code>
+```
+输出：`data/{代码}_step3_ma_events.csv`
+
+**Step 4 — DeepSeek 综合研判**
+```bash
+python skill4_comprehensive.py <ts_code>
+```
+输出：`data/{代码}_综合研判报告.md`
+
+执行完毕后，将 Step 4 报告内容完整呈现给用户，并用 `open_result_view` 展示报告文件。
+
+> 如需一键运行全部步骤，也可执行：
+> ```bash
+> python pipeline_run.py <股票代码> --skip-confirm
+> ```
+
+---
+
+## 代码格式说明
+
+- `skill1` 支持直接传中文名称（如 `长江电力`），会自动查询 ts_code
+- `skill2/3/4` 需要传完整 ts_code（如 `600900.SH`），可从 skill1 输出中获取
+- `pipeline_run.py` 同时支持中文名和代码

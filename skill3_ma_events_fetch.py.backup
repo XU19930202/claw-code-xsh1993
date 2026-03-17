@@ -1,0 +1,332 @@
+"""
+Skill 3：并购事件获取（v2 - 巨潮优先）
+──────────────────────────────────────
+输入：股票代码
+输出：CSV文件 - 历史重大并购/重组/控制权变更事件清单
+
+数据源优先级：
+  1. 巨潮资讯网公告检索（主力，免费，数据最全）
+  2. Tushare 股东变更追踪（补充，识别控制权变更）
+  3. Tushare 大宗交易（补充，识别并购前兆）
+
+用法：
+    python skill3_ma_events_fetch.py 600900.SH
+    python skill3_ma_events_fetch.py 长江电力
+    python skill3_ma_events_fetch.py 603197
+    python skill3_ma_events_fetch.py 600900.SH --analyze-pdfs
+"""
+
+import sys
+import io
+import time
+import tushare as ts
+import pandas as pd
+from config import TUSHARE_TOKEN, get_data_path
+from cninfo_crawler import fetch_cninfo_ma_events
+
+# Windows GBK 终端兼容
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
+ts.set_token(TUSHARE_TOKEN)
+pro = ts.pro_api()
+
+
+def resolve_codes(keyword: str) -> tuple:
+    """
+    统一解析输入 → (ts_code, stock_code_pure, name)
+    输入: "603197" / "603197.SH" / "保隆科技"
+    输出: ("603197.SH", "603197", "保隆科技")
+    """
+    keyword = keyword.strip()
+    df = pro.stock_basic(exchange="", list_status="L", fields="ts_code,symbol,name")
+
+    # 带后缀的代码
+    if "." in keyword:
+        match = df[df["ts_code"] == keyword]
+        if not match.empty:
+            r = match.iloc[0]
+            return r["ts_code"], r["symbol"], r["name"]
+
+    # 纯数字代码
+    code_clean = keyword.split(".")[0]
+    if code_clean.isdigit():
+        match = df[df["symbol"] == code_clean]
+        if not match.empty:
+            r = match.iloc[0]
+            return r["ts_code"], r["symbol"], r["name"]
+
+    # 简称匹配
+    match = df[df["name"] == keyword]
+    if not match.empty:
+        r = match.iloc[0]
+        return r["ts_code"], r["symbol"], r["name"]
+
+    match = df[df["name"].str.contains(keyword, na=False)]
+    if not match.empty:
+        r = match.iloc[0]
+        return r["ts_code"], r["symbol"], r["name"]
+
+    raise ValueError(f"未找到股票: {keyword}")
+
+
+def fetch_shareholder_changes(ts_code: str, verbose: bool = True) -> pd.DataFrame:
+    """
+    源2（Tushare补充）：追踪十大股东变化，识别控制权变更
+    """
+    if verbose:
+        print(f"\n  [Tushare] 追踪股东变更...")
+    try:
+        df = pro.top10_holders(
+            ts_code=ts_code,
+            fields="ann_date,end_date,holder_name,hold_amount,hold_ratio"
+        )
+        time.sleep(0.3)
+    except Exception as e:
+        if verbose:
+            print(f"  ⚠️ 股东数据获取异常: {e}")
+        return pd.DataFrame()
+
+    if df.empty:
+        if verbose:
+            print(f"  未获取到股东数据")
+        return pd.DataFrame()
+
+    # 按报告期分组，找第一大股东
+    top1_by_period = []
+    for end_date, group in df.groupby("end_date"):
+        group_sorted = group.sort_values("hold_ratio", ascending=False)
+        if not group_sorted.empty:
+            top1 = group_sorted.iloc[0]
+            top1_by_period.append({
+                "end_date": end_date,
+                "top1_holder": top1["holder_name"],
+                "top1_ratio": top1["hold_ratio"],
+            })
+
+    df_top1 = pd.DataFrame(top1_by_period)
+    if df_top1.empty:
+        return pd.DataFrame()
+
+    df_top1 = df_top1.sort_values("end_date").reset_index(drop=True)
+
+    # 检测第一大股东变化
+    changes = []
+    for i in range(1, len(df_top1)):
+        prev = df_top1.iloc[i - 1]
+        curr = df_top1.iloc[i]
+        if prev["top1_holder"] != curr["top1_holder"]:
+            changes.append({
+                "event_date": curr["end_date"],
+                "year": curr["end_date"][:4],
+                "event_type": "控制权/大股东变更",
+                "detail": (
+                    f"[股东变更] 第一大股东由「{prev['top1_holder']}」"
+                    f"({prev['top1_ratio']:.2f}%) "
+                    f"变更为「{curr['top1_holder']}」"
+                    f"({curr['top1_ratio']:.2f}%)"
+                ),
+                "source": "Tushare股东追踪",
+            })
+
+    if verbose:
+        if changes:
+            print(f"  检测到 {len(changes)} 次大股东变更")
+        else:
+            print(f"  未检测到大股东变更")
+
+    return pd.DataFrame(changes)
+
+
+def fetch_block_trades(ts_code: str, verbose: bool = True) -> pd.DataFrame:
+    """
+    源3（Tushare补充）：大额大宗交易记录
+    """
+    if verbose:
+        print(f"  [Tushare] 查询大宗交易...")
+    try:
+        df = pro.block_trade(
+            ts_code=ts_code,
+            fields="trade_date,price,vol,amount,buyer,seller"
+        )
+        time.sleep(0.3)
+    except Exception as e:
+        if verbose:
+            print(f"  ⚠️ 大宗交易获取异常: {e}")
+        return pd.DataFrame()
+
+    if df.empty:
+        if verbose:
+            print(f"  无大宗交易记录")
+        return pd.DataFrame()
+
+    # 只保留金额>5000万的
+    df_big = df[df["amount"] > 5000].copy()
+    if df_big.empty:
+        if verbose:
+            print(f"  无大额大宗交易（>5000万）")
+        return pd.DataFrame()
+
+    df_big = df_big.sort_values("trade_date", ascending=False)
+    results = []
+    for _, row in df_big.iterrows():
+        results.append({
+            "event_date": row["trade_date"],
+            "year": str(row["trade_date"])[:4],
+            "event_type": "大宗交易",
+            "detail": (
+                f"[大宗交易] 买方:{row.get('buyer', '—')} "
+                f"卖方:{row.get('seller', '—')} "
+                f"金额:{row['amount']:.0f}万元"
+            ),
+            "source": "Tushare大宗交易",
+        })
+
+    if verbose:
+        print(f"  找到 {len(results)} 条大额大宗交易")
+
+    return pd.DataFrame(results)
+
+
+def run(ts_code_or_keyword: str, verbose: bool = True, analyze_pdfs: bool = False) -> pd.DataFrame:
+    """
+    主入口：巨潮（主力） + Tushare股东/大宗（补充） + 可选PDF全文分析
+    """
+    # 解析代码
+    ts_code, stock_code, name = resolve_codes(ts_code_or_keyword)
+
+    if verbose:
+        print(f"{'=' * 70}")
+        print(f" {name}（{ts_code}）历史并购/重组事件获取 v2")
+        print(f" 数据源：巨潮资讯网(主) + Tushare(辅)")
+        if analyze_pdfs:
+            print(f" 📄 PDF全文分析：已开启")
+        print(f"{'=' * 70}")
+
+    all_events = []
+
+    # ── 源1（主力）：巨潮资讯网公告检索 ──
+    if verbose:
+        print(f"\n{'─' * 70}")
+        print(f" [1/3] 巨潮资讯网公告检索")
+        print(f"{'─' * 70}")
+
+    df_cninfo = fetch_cninfo_ma_events(stock_code, verbose=verbose)
+    if not df_cninfo.empty:
+        all_events.append(df_cninfo)
+        if verbose:
+            print(f"\n  ✅ 巨潮: {len(df_cninfo)} 条并购/重组公告")
+    else:
+        if verbose:
+            print(f"\n  ⚠️ 巨潮未找到相关公告")
+
+    # ── 源2（补充）：Tushare股东变更 ──
+    if verbose:
+        print(f"\n{'─' * 70}")
+        print(f" [2/3] Tushare 股东变更追踪")
+        print(f"{'─' * 70}")
+
+    df_holder = fetch_shareholder_changes(ts_code, verbose=verbose)
+    if not df_holder.empty:
+        all_events.append(df_holder)
+
+    # ── 源3（补充）：Tushare大宗交易 ──
+    if verbose:
+        print(f"\n{'─' * 70}")
+        print(f" [3/3] Tushare 大宗交易")
+        print(f"{'─' * 70}")
+
+    df_block = fetch_block_trades(ts_code, verbose=verbose)
+    if not df_block.empty:
+        all_events.append(df_block)
+
+    # ── 合并所有事件 ──
+    if not all_events:
+        if verbose:
+            print(f"\n❌ 所有数据源均未找到并购/重组事件")
+        return pd.DataFrame()
+
+    df_all = pd.concat(all_events, ignore_index=True)
+
+    # 统一列
+    standard_cols = ["event_date", "year", "event_type", "detail", "source"]
+    for col in standard_cols:
+        if col not in df_all.columns:
+            df_all[col] = ""
+
+    if "pdf_url" not in df_all.columns:
+        df_all["pdf_url"] = ""
+
+    df_all = df_all.sort_values("event_date", ascending=True).reset_index(drop=True)
+
+    # 保存
+    output_path = get_data_path(ts_code, "step3_ma_events")
+    df_all.to_csv(output_path, index=False, encoding="utf-8-sig")
+
+    if verbose:
+        print(f"\n{'=' * 70}")
+        print(f" 汇总结果：共 {len(df_all)} 条事件记录")
+        print(f"{'─' * 70}")
+
+        # 按数据源统计
+        print(f"\n数据源分布：")
+        for src, count in df_all["source"].value_counts().items():
+            print(f"  {src}: {count} 条")
+
+        # 按事件类型统计
+        print(f"\n事件类型分布：")
+        for evt_type, count in df_all["event_type"].value_counts().items():
+            print(f"  {evt_type}: {count} 条")
+
+        # 按年度统计
+        print(f"\n年度分布：")
+        for year, count in df_all["year"].value_counts().sort_index().items():
+            print(f"  {year}年: {count} 条")
+
+        # 打印重要事件
+        important_types = [
+            "控制权变更", "控制权/大股东变更",
+            "重大资产重组", "借壳上市",
+            "要约收购", "发行股份购买资产",
+            "收购/并购",
+        ]
+        important = df_all[df_all["event_type"].isin(important_types)]
+        if not important.empty:
+            print(f"\n{'=' * 70}")
+            print(f" ⭐ 重大事件明细（{len(important)}条）")
+            print(f"{'─' * 70}")
+            for _, evt in important.iterrows():
+                print(f"  [{evt['event_date']}] 【{evt['event_type']}】")
+                print(f"    {evt['detail']}")
+                if evt.get("pdf_url"):
+                    print(f"    📄 {evt['pdf_url']}")
+                print()
+
+        print(f"\n事件清单已保存至：{output_path}")
+
+    # ── 可选：PDF全文分析 ──
+    if analyze_pdfs and not df_all.empty:
+        try:
+            from ma_pdf_analyzer import analyze_ma_pdfs
+            df_all = analyze_ma_pdfs(df_all, ts_code=ts_code, verbose=verbose)
+        except ImportError:
+            if verbose:
+                print("⚠️ ma_pdf_analyzer 模块未找到，跳过PDF全文分析")
+        except Exception as e:
+            if verbose:
+                print(f"⚠️ PDF分析异常: {e}")
+
+    return df_all
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="并购事件获取")
+    parser.add_argument("stock", help="股票代码或简称")
+    parser.add_argument("--analyze-pdfs", action="store_true",
+                        help="开启核心公告PDF全文分析")
+    args = parser.parse_args()
+
+    run(args.stock, analyze_pdfs=args.analyze_pdfs)

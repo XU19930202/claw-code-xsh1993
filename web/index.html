@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>美股财经新闻 - Stock News</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">加载中...</div>
+    </div>
+
+    <!-- 顶部股票行情栏 -->
+    <header class="stock-ticker">
+        <div class="ticker-container">
+            <div class="ticker-content" id="stockTicker">
+                <!-- 股票数据将通过JavaScript动态加载 -->
+            </div>
+        </div>
+    </header>
+
+    <!-- 主标题 -->
+    <div class="hero-section">
+        <h1 class="main-title">📈 美股财经新闻</h1>
+        <p class="subtitle">实时掌握美股市场动态与最新资讯</p>
+    </div>
+
+    <!-- 筛选按钮 -->
+    <div class="filter-section">
+        <button class="filter-btn active" data-filter="all">全部</button>
+        <button class="filter-btn" data-filter="market">股市</button>
+        <button class="filter-btn" data-filter="tech">科技</button>
+        <button class="filter-btn" data-filter="economy">经济</button>
+        <button class="filter-btn" data-filter="crypto">加密货币</button>
+    </div>
+
+    <!-- 刷新按钮 -->
+    <div class="action-section">
+        <button class="refresh-btn" id="refreshBtn">
+            <span class="refresh-icon">🔄</span> 刷新新闻
+        </button>
+    </div>
+
+    <!-- 新闻卡片容器 -->
+    <main class="news-container" id="newsContainer">
+        <!-- 新闻卡片将通过JavaScript动态加载 -->
+    </main>
+
+    <!-- 底部 -->
+    <footer class="footer">
+        <p>数据来源: 模拟数据仅供演示 | 实际使用请接入真实API</p>
+        <p>© 2026 Stock News. All rights reserved.</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

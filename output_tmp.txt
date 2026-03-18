@@ -1,0 +1,12 @@
+2026-03-18 08:31:11,570 [INFO] 业绩拐点筛选器启动
+2026-03-18 08:31:11,570 [INFO] 模式: AB | 市值 30~3000亿
+Traceback (most recent call last):
+  File "c:\Users\Lenovo\WorkBuddy\20260311213700\earnings_inflection.py", line 482, in <module>
+    stock_pool = get_stock_pool()
+                 ^^^^^^^^^^^^^^^^
+  File "c:\Users\Lenovo\WorkBuddy\20260311213700\earnings_inflection.py", line 68, in get_stock_pool
+    df = pro.stock_basic(exchange='', list_status='L',
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Lenovo\AppData\Local\Programs\Python\Python312\Lib\site-packages\tushare\pro\client.py", line 45, in query
+    raise Exception(result['msg'])
+Exception: 鎮ㄧ殑IP鏁伴噺瓒呴檺锛屾渶澶ф暟閲忎负5涓紒

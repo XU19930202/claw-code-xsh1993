@@ -69,6 +69,25 @@
 
 ---
 
+### 2026-03-17 23:32:05 (第7次执行 - deepseek-reasoner 测试)
+- **状态**: ✅ 成功
+- **模型升级**: deepseek-chat → **deepseek-reasoner**
+- **抓取情况**:
+  - 美股导读: https://stock.eastmoney.com/a/cmgdd.html
+  - 美股聚焦: https://stock.eastmoney.com/a/cmgyw.html
+  - 共 21 篇美股新闻
+  - 总字数: 10,974 字
+- **AI摘要**:
+  - 模型: **deepseek-reasoner**（启用深度思维）
+  - max_tokens: 8000（支持思维链过程）
+  - 生成字数: 863 字
+- **推送结果**:
+  - 飞书推送成功 (StatusCode: 0)
+- **执行时长**: 约 36 秒（比chat模型增加~7秒，用于深度思考）
+- **日期**: 2026-03-17
+
+---
+
 ## 任务说明
 该自动化任务每天晚上 22:11 自动运行,执行以下流程:
 1. 抓取东方财富美股导读和美股聚焦新闻

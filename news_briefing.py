@@ -123,7 +123,7 @@ def fetch_stcn_content(url):
     except: return ""
 
 # ============================================================
-#  DeepSeek API
+#  DeepSeek API（支持 Reasoner 模型）
 # ============================================================
 def call_llm(config, content):
     try:
@@ -145,13 +145,15 @@ def call_llm(config, content):
 
     try:
         logger.info(f"[LLM] {model} ...")
+        # Reasoner 模型需要更多 tokens 用于深度思考过程
+        max_tok = 8000 if "reasoner" in model else 2000
         resp = requests.post(api_url, headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
         }, json={
             "model": model,
             "messages": [{"role":"system","content":sys_p}, {"role":"user","content":usr}],
-            "max_tokens": 2000, "temperature": 0.3
+            "max_tokens": max_tok, "temperature": 0.3
         }, timeout=120)
         resp.raise_for_status()
         data = resp.json()

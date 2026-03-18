@@ -128,13 +128,15 @@ def call_llm(config, content):
 
     try:
         logger.info(f"[LLM] {llm['model']} ...")
+        # Reasoner模型需要更多tokens用于思考过程
+        max_tok = 8000 if "reasoner" in llm["model"] else 1500
         resp = requests.post(llm["api_url"], headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {llm['api_key']}"
         }, json={
             "model": llm["model"],
             "messages": [{"role":"system","content":system_prompt}, {"role":"user","content":user_msg}],
-            "max_tokens": 1500, "temperature": 0.3
+            "max_tokens": max_tok, "temperature": 0.3
         }, timeout=120)
         resp.raise_for_status()
         data = resp.json()

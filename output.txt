@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "c:\Users\Lenovo\WorkBuddy\20260311213700\backtest_signal_pool.py", line 663, in <module>
+    print("\u26a0\ufe0f 请先在脚本顶部填入 TUSHARE_TOKEN")
+UnicodeEncodeError: 'gbk' codec can't encode character '\u26a0' in position 0: illegal multibyte sequence

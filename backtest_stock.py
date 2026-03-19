@@ -58,16 +58,16 @@ def get_ts_code(code_or_name: str) -> str:
     return code_or_name
 
 
-def fetch_stock_data(ts_code: str, days: int = 180) -> pd.DataFrame:
+def fetch_stock_data(ts_code: str, days: int = 180, start_date: datetime = None) -> pd.DataFrame:
     """
     获取股票历史行情数据
     """
-    config = Config()
-    ts.set_token(config.tushare_token)
+    ts.set_token(config.TUSHARE_TOKEN)
     pro = ts.pro_api()
     
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
+    if start_date is None:
+        start_date = end_date - timedelta(days=days)
     
     end_str = end_date.strftime('%Y%m%d')
     start_str = start_date.strftime('%Y%m%d')
@@ -89,7 +89,7 @@ def fetch_stock_data(ts_code: str, days: int = 180) -> pd.DataFrame:
     if not adj_df.empty:
         adj_df = adj_df.sort_values('trade_date').reset_index(drop=True)
         df = df.merge(adj_df[['trade_date', 'adj_factor']], on='trade_date', how='left')
-        df['adj_factor'] = df['adj_factor'].fillna(method='ffill').fillna(method='bfill')
+        df['adj_factor'] = df['adj_factor'].ffill().bfill()
         
         # 计算前复权价格
         latest_adj = df['adj_factor'].iloc[-1]
@@ -116,16 +116,16 @@ def fetch_stock_data(ts_code: str, days: int = 180) -> pd.DataFrame:
     return df
 
 
-def fetch_index_data(days: int = 180) -> pd.DataFrame:
+def fetch_index_data(days: int = 180, start_date: datetime = None) -> pd.DataFrame:
     """
     获取上证指数数据
     """
-    config = Config()
-    ts.set_token(config.tushare_token)
+    ts.set_token(config.TUSHARE_TOKEN)
     pro = ts.pro_api()
     
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
+    if start_date is None:
+        start_date = end_date - timedelta(days=days)
     
     end_str = end_date.strftime('%Y%m%d')
     start_str = start_date.strftime('%Y%m%d')
@@ -141,12 +141,22 @@ def fetch_index_data(days: int = 180) -> pd.DataFrame:
 
 def main():
     if len(sys.argv) < 2:
-        print("用法: python backtest_stock.py <股票代码或名称>")
+        print("用法: python backtest_stock.py <股票代码或名称> [起始日期YYYY-MM-DD]")
         print("示例: python backtest_stock.py 601689")
+        print("      python backtest_stock.py 601689 2025-01-01")
         print("      python backtest_stock.py 拓普集团")
         sys.exit(1)
     
     code_or_name = sys.argv[1]
+    
+    # 解析起始日期
+    start_date = None
+    if len(sys.argv) >= 3:
+        try:
+            start_date = datetime.strptime(sys.argv[2], '%Y-%m-%d')
+            print(f"自定义起始日期: {sys.argv[2]}")
+        except ValueError:
+            print(f"警告: 日期格式错误 '{sys.argv[2]}'，使用默认180天")
     
     print("=" * 85)
     print(f"  MA20突破回踩策略 v5 - 股票回测")
@@ -160,8 +170,8 @@ def main():
     
     try:
         # 获取数据
-        stock_df = fetch_stock_data(ts_code)
-        index_df = fetch_index_data()
+        stock_df = fetch_stock_data(ts_code, start_date=start_date)
+        index_df = fetch_index_data(start_date=start_date)
         
         print(f"数据范围: {stock_df['交易日期'].min().strftime('%Y-%m-%d')} ~ {stock_df['交易日期'].max().strftime('%Y-%m-%d')}")
         print(f"共 {len(stock_df)} 个交易日")

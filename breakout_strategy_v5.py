@@ -26,10 +26,12 @@ MA20突破回踩策略 v5 完整版
 【出场规则】
 阶段1 - MA20阶段（趋势未确立）：
    - 四条件同时满足才走：放量(≥1.2) + 下跌 + 破MA20 + 大盘正常(跌<1%)
+   - 缩量阴跌累计止损：跌破MA20后累计跌幅超过3% → 直接走（防温水煮青蛙）
    - 缩量破MA20 → 洗盘，不走
    - 放量跌但大盘大跌 → 系统风险，不走
    - 放量但上涨/收复中 → 不走
    - 大跌但未放量 → 情绪波动，不走
+   - 站回MA20 → 累计跌幅清零
 
 阶段切换 - 多头确立：
    - MA5 > MA20 × 1.03 且连续维持3天以上
@@ -96,6 +98,7 @@ class StrategyConfig:
     ma20_tolerance: float = 0.985 # MA20容差（允许1.5%的误差）
     reentry_window: int = 30      # 二次上车观察窗口
     max_hold_days: int = 60       # 最大持仓天数
+    ma20_cum_loss_limit: float = -3.0  # MA20下方缩量阴跌累计止损阈值
 
 
 def detect_board(code: str) -> BoardConfig:
@@ -210,15 +213,51 @@ class EntryResult:
 
 def run_entry(stock: pd.DataFrame, signal_idx: int, idx_map: Dict,
               cfg: StrategyConfig, board: BoardConfig,
-              last_exit_idx: int = -1) -> EntryResult:
+              last_exit_idx: int = -1,
+              signal_history: List[Dict] = None) -> EntryResult:
     """
     从信号日开始，追踪14天寻找买点
+    
+    Args:
+        signal_history: 历史信号记录，用于判断是否需要收紧买入条件
+                       每个元素包含: {'date': datetime, 'exit_type': str}
     """
     result = EntryResult()
     row = stock.iloc[signal_idx]
+    signal_date = row['交易日期']
     signal_pct = row['pct']
     ma20 = row['MA20']
     had_decline = False
+    
+    # === 新增：判断是否需要收紧买入条件 ===
+    strict_mode = False
+    strict_reason = ""
+    
+    if signal_history:
+        # 调试：打印历史信号
+        # print(f"  [调试] 当前信号日期: {signal_date.strftime('%m-%d')}, 历史信号数: {len(signal_history)}")
+        
+        # 规则1：30天内有过MA20止损
+        for sig in signal_history:
+            if sig.get('exit_type') == 'MA20止损':
+                days_ago = (signal_date - sig['date']).days
+                # print(f"  [调试] 检查MA20止损: {sig['date'].strftime('%m-%d')}, {days_ago}天前")
+                if 0 < days_ago <= 30:
+                    strict_mode = True
+                    strict_reason = f"30天内有过MA20止损({sig['date'].strftime('%m-%d')})"
+                    break
+        
+        # 规则2：7天内出现≥2个信号（当前是第2个及以上）
+        if not strict_mode:
+            recent_count = sum(1 for sig in signal_history 
+                              if 0 < (signal_date - sig['date']).days <= 7)
+            # print(f"  [调试] 7天内信号数: {recent_count}")
+            if recent_count >= 1:  # 当前是第2个信号
+                strict_mode = True
+                strict_reason = f"7天内出现{recent_count + 1}个信号"
+    
+    if strict_mode:
+        result.log.append(f"  [收紧] {strict_reason}，只接受极度缩量企稳")
     
     for j in range(signal_idx + 1, min(signal_idx + cfg.track_days + 1, len(stock))):
         if j <= last_exit_idx:
@@ -249,11 +288,11 @@ def run_entry(stock: pd.DataFrame, signal_idx: int, idx_map: Dict,
         if v >= cfg.vol_up_threshold and pct < 0:
             if not above:
                 result.log.append(
-                    f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | ❌ 放量跌破MA20")
+                    f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [X] 放量跌破MA20")
                 break
             else:
                 result.log.append(
-                    f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | ⚠️ 放量跌未破MA20")
+                    f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [!] 放量跌未破MA20")
                 had_decline = True
                 continue
         
@@ -265,10 +304,10 @@ def run_entry(stock: pd.DataFrame, signal_idx: int, idx_map: Dict,
                 ) * cfg.ma20_tolerance
                 if not prev_above:
                     result.log.append(
-                        f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | ❌ 连续破MA20")
+                        f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [X] 连续破MA20")
                     break
             result.log.append(
-                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | ⚠️ 破MA20")
+                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [!] 破MA20")
             continue
         
         # === 大盘过滤 ===
@@ -278,7 +317,7 @@ def run_entry(stock: pd.DataFrame, signal_idx: int, idx_map: Dict,
         if above and extreme_shrink and stabilized:
             if mkt <= -1.0:
                 result.log.append(
-                    f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | 🛑 大盘跌{mkt:.2f}%")
+                    f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [S] 大盘跌{mkt:.2f}%")
                 continue
             result.triggered = True
             result.buy_idx = j
@@ -286,14 +325,20 @@ def run_entry(stock: pd.DataFrame, signal_idx: int, idx_map: Dict,
             result.buy_date = d
             result.buy_type = '极度缩量企稳'
             result.log.append(
-                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | ✅ 极度缩量企稳(Day{day_n})")
+                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [OK] 极度缩量企稳(Day{day_n})")
             break
         
         # === 回踩确认 / 动能衰减 ===
         if above and not_vol_up and (is_small_yang or is_doji) and stabilized:
+            # 收紧模式下，跳过普通回踩确认/动能衰减
+            if strict_mode:
+                result.log.append(
+                    f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [等] 收紧模式，等待极度缩量")
+                continue
+            
             if mkt <= -1.0:
                 result.log.append(
-                    f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | 🛑 大盘跌{mkt:.2f}%")
+                    f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [S] 大盘跌{mkt:.2f}%")
                 continue
             reason = '动能衰减' if (momentum_decay and not had_decline) else '回踩确认'
             result.triggered = True
@@ -302,22 +347,22 @@ def run_entry(stock: pd.DataFrame, signal_idx: int, idx_map: Dict,
             result.buy_date = d
             result.buy_type = reason
             result.log.append(
-                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | ✅ {reason}(Day{day_n})")
+                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [OK] {reason}(Day{day_n})")
             break
         
         # === 等待状态 ===
         if pct > 5:
             result.log.append(
-                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | ⏳ 过热")
+                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [...] 过热")
         elif pct > 0 and v >= cfg.vol_up_threshold:
             result.log.append(
-                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | ⏳ 放量上涨")
+                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [...] 放量上涨")
         elif pct > 0 and not stabilized:
             result.log.append(
-                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | ⏳ 未企稳")
+                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [...] 未企稳")
         else:
             result.log.append(
-                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | ⏳ 等企稳")
+                f"  Day{day_n:2d} {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x | [...] 等企稳")
     
     return result
 
@@ -347,6 +392,7 @@ def run_exit(stock: pd.DataFrame, buy_idx: int, buy_price: float,
     below_ma5_count = 0
     gap_streak = 0
     had_limit_up = False
+    below_ma20_cum_loss = 0.0  # MA20下方累计跌幅
     
     for k in range(buy_idx + 1, min(buy_idx + cfg.max_hold_days, len(stock))):
         r = stock.iloc[k]
@@ -379,7 +425,7 @@ def run_exit(stock: pd.DataFrame, buy_idx: int, buy_price: float,
             result.exit_date = d
             result.exit_reason = '跌停熔断'
             result.exit_type = 'limit_down'
-            result.log.append(f"  {d} | {close:.2f} {pct:+.2f}% | +{pnl:.1f}% | 🚨 跌停熔断")
+            result.log.append(f"  {d} | {close:.2f} {pct:+.2f}% | +{pnl:.1f}% | [!!] 跌停熔断")
             return result
         
         # ============ 多头确立判定 ============
@@ -393,7 +439,7 @@ def run_exit(stock: pd.DataFrame, buy_idx: int, buy_price: float,
             below_ma5_count = 0
             result.log.append(
                 f"  {d} | {close:.2f} {pct:+.2f}% 差距{gap:+.1f}%(连续{gap_streak}天) "
-                f"| +{pnl:.1f}% | 🔄 多头确立")
+                f"| +{pnl:.1f}% | [~] 多头确立")
         
         # MA5回退MA20
         if phase == 'MA5' and m5 < m20:
@@ -401,7 +447,7 @@ def run_exit(stock: pd.DataFrame, buy_idx: int, buy_price: float,
             below_ma5_count = 0
             gap_streak = 0
             result.log.append(
-                f"  {d} | {close:.2f} {pct:+.2f}% | +{pnl:.1f}% | 🔄 回退MA20")
+                f"  {d} | {close:.2f} {pct:+.2f}% | +{pnl:.1f}% | [~] 回退MA20")
         
         # ============ MA5阶段出场 ============
         if phase == 'MA5':
@@ -413,16 +459,16 @@ def run_exit(stock: pd.DataFrame, buy_idx: int, buy_price: float,
                 result.exit_reason = '高开低走且破MA5'
                 result.exit_type = 'ma5'
                 result.log.append(
-                    f"  {d} | {close:.2f} 开{opn:.2f} ✗MA5({m5:.2f}) "
-                    f"| +{pnl:.1f}% | ❌ 高开低走且破MA5")
+                    f"  {d} | {close:.2f} 开{opn:.2f} XMA5({m5:.2f}) "
+                    f"| +{pnl:.1f}% | [X] 高开低走且破MA5")
                 return result
             
             if not above_ma5:
                 if is_up_day:
                     # ★ 破MA5但收阳 → 在努力收复，不计数
                     result.log.append(
-                        f"  {d} | {close:.2f} {pct:+.2f}% ✗MA5({m5:.2f}) "
-                        f"| +{pnl:.1f}% | ✅ 破MA5但收阳，不计数")
+                        f"  {d} | {close:.2f} {pct:+.2f}% XMA5({m5:.2f}) "
+                        f"| +{pnl:.1f}% | [OK] 破MA5但收阳，不计数")
                     below_ma5_count = 0
                 else:
                     below_ma5_count += 1
@@ -433,26 +479,30 @@ def run_exit(stock: pd.DataFrame, buy_idx: int, buy_price: float,
                         result.exit_reason = '连续2天破MA5且收阴'
                         result.exit_type = 'ma5'
                         result.log.append(
-                            f"  {d} | {close:.2f} {pct:+.2f}% ✗MA5({m5:.2f}) "
-                            f"| +{pnl:.1f}% | ❌ 连续2天破MA5且收阴")
+                            f"  {d} | {close:.2f} {pct:+.2f}% XMA5({m5:.2f}) "
+                            f"| +{pnl:.1f}% | [X] 连续2天破MA5且收阴")
                         return result
                     else:
                         result.log.append(
-                            f"  {d} | {close:.2f} {pct:+.2f}% ✗MA5({m5:.2f}) "
-                            f"| +{pnl:.1f}% | ⚠️ 破MA5+收阴 第{below_ma5_count}天")
+                            f"  {d} | {close:.2f} {pct:+.2f}% XMA5({m5:.2f}) "
+                            f"| +{pnl:.1f}% | [!] 破MA5+收阴 第{below_ma5_count}天")
             else:
                 if below_ma5_count > 0:
                     result.log.append(
-                        f"  {d} | {close:.2f} {pct:+.2f}% ✓MA5 | +{pnl:.1f}% | ✅ 站回MA5")
+                        f"  {d} | {close:.2f} {pct:+.2f}% OKMA5 | +{pnl:.1f}% | [OK] 站回MA5")
                 below_ma5_count = 0
                 if abs(pct) > 2:
                     result.log.append(
-                        f"  {d} | {close:.2f} {pct:+.2f}% ✓MA5 差距{gap:+.1f}% "
-                        f"| +{pnl:.1f}% | 持有{'🔥' if had_limit_up else ''}")
+                        f"  {d} | {close:.2f} {pct:+.2f}% OKMA5 差距{gap:+.1f}% "
+                        f"| +{pnl:.1f}% | 持有{'[HOT]' if had_limit_up else ''}")
         
         # ============ MA20阶段出场 ============
         elif phase == 'MA20':
             if not above_ma20:
+                # 累计跌幅追踪
+                below_ma20_cum_loss += pct
+                
+                # 止损条件1：放量+下跌+破MA20+大盘正常
                 if v >= cfg.vol_up_threshold and pct < 0 and mkt > -1.0:
                     result.exit_idx = k
                     result.exit_price = close
@@ -460,33 +510,53 @@ def run_exit(stock: pd.DataFrame, buy_idx: int, buy_price: float,
                     result.exit_reason = '放量+下跌+破MA20+大盘正常'
                     result.exit_type = 'ma20'
                     result.log.append(
-                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x ✗MA20 "
-                        f"| +{pnl:.1f}% | ❌ 放量+下跌+破MA20+大盘正常")
+                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x XMA20 "
+                        f"| +{pnl:.1f}% | [X] 放量+下跌+破MA20+大盘正常")
                     return result
-                elif v >= cfg.vol_up_threshold and pct < 0 and mkt <= -1.0:
+                
+                # 止损条件2：缩量阴跌累计超过阈值
+                if below_ma20_cum_loss <= cfg.ma20_cum_loss_limit:
+                    result.exit_idx = k
+                    result.exit_price = close
+                    result.exit_date = d
+                    result.exit_reason = f'缩量阴跌累计{below_ma20_cum_loss:.1f}%'
+                    result.exit_type = 'ma20'
                     result.log.append(
-                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x ✗MA20 "
-                        f"| +{pnl:.1f}% | ⚠️ 放量跌但大盘大跌")
+                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x XMA20 "
+                        f"累计{below_ma20_cum_loss:+.1f}% "
+                        f"| +{pnl:.1f}% | [X] 缩量阴跌累计>{abs(cfg.ma20_cum_loss_limit):.0f}%止损")
+                    return result
+                
+                # 观察状态
+                if v >= cfg.vol_up_threshold and pct < 0 and mkt <= -1.0:
+                    result.log.append(
+                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x XMA20 "
+                        f"累计{below_ma20_cum_loss:+.1f}% "
+                        f"| +{pnl:.1f}% | [!] 放量跌但大盘大跌")
                 elif v >= cfg.vol_up_threshold and pct >= 0:
                     result.log.append(
-                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x ✗MA20 "
-                        f"| +{pnl:.1f}% | ✅ 放量收复中")
+                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x XMA20 "
+                        f"| +{pnl:.1f}% | [OK] 放量收复中")
                 elif v <= 0.85:
                     result.log.append(
-                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x ✗MA20 "
-                        f"| +{pnl:.1f}% | ✅ 缩量洗盘")
+                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x XMA20 "
+                        f"累计{below_ma20_cum_loss:+.1f}% "
+                        f"| +{pnl:.1f}% | [OK] 缩量洗盘")
                 elif pct < -5:
                     result.log.append(
-                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x ✗MA20 "
-                        f"| +{pnl:.1f}% | ✅ 大跌但未放量")
+                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x XMA20 "
+                        f"| +{pnl:.1f}% | [OK] 大跌但未放量")
                 else:
                     result.log.append(
-                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x ✗MA20 "
-                        f"| +{pnl:.1f}% | ⚠️ 观察")
+                        f"  {d} | {close:.2f} {pct:+.2f}% 量比{v:.2f}x XMA20 "
+                        f"累计{below_ma20_cum_loss:+.1f}% "
+                        f"| +{pnl:.1f}% | [!] 观察")
             else:
+                # 站回MA20，重置累计跌幅
+                below_ma20_cum_loss = 0.0
                 if abs(pct) > 2 or gap > 2:
                     result.log.append(
-                        f"  {d} | {close:.2f} {pct:+.2f}% ✓MA20 差距{gap:+.1f}%"
+                        f"  {d} | {close:.2f} {pct:+.2f}% OKMA20 差距{gap:+.1f}%"
                         f"(连续{gap_streak}天) | +{pnl:.1f}% | MA20持有")
     
     # 60天未触发出场 → 数据末尾
@@ -529,7 +599,7 @@ def check_reentry(stock: pd.DataFrame, exit_idx: int, cfg: StrategyConfig) -> Re
         
         # 跌破MA20 → 趋势结束，取消观察
         if close < m20:
-            result.log.append(f"  {d} | {close:.2f} ✗MA20({m20:.2f}) | 破MA20，取消观察")
+            result.log.append(f"  {d} | {close:.2f} XMA20({m20:.2f}) | 破MA20，取消观察")
             return result
         
         # 站回MA5 → 触发二次上车
@@ -539,11 +609,11 @@ def check_reentry(stock: pd.DataFrame, exit_idx: int, cfg: StrategyConfig) -> Re
             result.reentry_price = close
             result.reentry_date = d
             result.log.append(
-                f"  {d} | {close:.2f} ✓MA5({m5:.2f}) ✓MA20({m20:.2f}) | ✅ 二次上车!")
+                f"  {d} | {close:.2f} OKMA5({m5:.2f}) OKMA20({m20:.2f}) | [OK] 二次上车!")
             return result
         
         result.log.append(
-            f"  {d} | {close:.2f} ✗MA5({m5:.2f}) ✓MA20({m20:.2f}) | 等待站回MA5")
+            f"  {d} | {close:.2f} XMA5({m5:.2f}) OKMA20({m20:.2f}) | 等待站回MA5")
     
     return result
 
@@ -603,21 +673,31 @@ def backtest(stock_df: pd.DataFrame, code: str,
     
     trades = []
     last_exit_idx = -1
+    signal_history = []  # 记录信号历史，用于判断收紧条件
     
-    for si in all_signals:
-        if si <= last_exit_idx:
-            continue
+    for idx, si in enumerate(all_signals):
+        # 注意：不再用 last_exit_idx 跳过信号，只用于二次上车检查
+        # 每个信号都应该被独立处理，用于收紧条件判断
         
         signal_date = str(stock.iloc[si]['交易日期'])[:10]
+        signal_date_obj = stock.iloc[si]['交易日期']
+        
+        # === 先记录信号到历史（用于后续信号判断收紧条件）===
+        signal_history.append({
+            'date': signal_date_obj,
+            'exit_type': '待处理'
+        })
+        
+
         
         # === 入场 ===
-        entry = run_entry(stock, si, idx_map, cfg, board, last_exit_idx)
+        entry = run_entry(stock, si, idx_map, cfg, board, last_exit_idx, signal_history)
         
         if not entry.triggered:
             if verbose:
-                status = '放弃' if any('❌' in l for l in entry.log) else '期满'
+                status = '放弃' if any('[X]' in l for l in entry.log) else '期满'
                 r = stock.iloc[si]
-                print(f"\n{'🔴' if '放弃' in status else '⚪'} {signal_date} | "
+                print(f"\n{'[亏]' if '放弃' in status else '[O]'} {signal_date} | "
                       f"{r['close']:.2f} 涨{r['pct']:+.1f}% | {status}")
                 for l in entry.log:
                     print(l)
@@ -652,7 +732,7 @@ def backtest(stock_df: pd.DataFrame, code: str,
             trades.append(trade)
             
             if verbose:
-                icon = '🟢' if total_pnl > 0 else '🔴'
+                icon = '[盈]' if total_pnl > 0 else '[亏]'
                 print(f"\n{icon} 第{trade.n}笔 信号:{signal_date} | {cur_buy_type}")
                 if '上车' in cur_buy_type:
                     print(f"  MA5止损后未破MA20，重新站上MA5 → 买回")
@@ -692,6 +772,23 @@ def backtest(stock_df: pd.DataFrame, code: str,
                 continue
             else:
                 break
+        
+        # === 更新当前信号的结果到历史 ===
+        # 判断退出类型：MA20止损 / MA5止损 / 放弃 / 其他
+        exit_type = '其他'
+        if not entry.triggered:
+            exit_type = '放弃'
+        elif trades and trades[-1].signal_date == signal_date:
+            # 检查最后一笔交易的退出原因
+            if hasattr(exit_result, 'exit_reason'):
+                if 'MA20' in exit_result.exit_reason or '缩量阴跌' in exit_result.exit_reason:
+                    exit_type = 'MA20止损'
+                elif 'MA5' in exit_result.exit_reason or '破MA5' in exit_result.exit_reason:
+                    exit_type = 'MA5止损'
+        
+        # 更新最后一个信号记录
+        if signal_history and signal_history[-1]['date'] == signal_date_obj:
+            signal_history[-1]['exit_type'] = exit_type
     
     return trades
 
@@ -729,7 +826,7 @@ def print_summary(trades: List[Trade], initial_capital: float = 200000):
     
     for t in trades:
         capital = capital * (1 + t.pnl / 100)
-        icon = '🟢' if t.pnl > 0 else '🔴'
+        icon = '[盈]' if t.pnl > 0 else '[亏]'
         print(f"  {icon}{t.n:>2d} | {t.trade_type:>8s} | {t.buy_date:>12s} | "
               f"{t.buy_price:>7.2f} | {t.exit_date:>12s} | {t.exit_price:>7.2f} | "
               f"{t.pnl:>+7.2f}% | {capital / 10000:>9.2f}万")
@@ -753,9 +850,9 @@ if __name__ == '__main__':
     print("=" * 85)
     
     # ---- 修改这里的文件路径 ----
-    stock_file = '/mnt/user-data/uploads/每日行情数据统计_601689.xlsx'
-    index_file = '/mnt/user-data/uploads/000001_SH行情数据统计明细.xlsx'
-    code = '601689'
+    stock_file = '个股行情数据.xlsx'
+    index_file = '000001_SH行情数据统计明细.xlsx'
+    code = '600760'
     # ----------------------------
     
     stock_df = pd.read_excel(stock_file)

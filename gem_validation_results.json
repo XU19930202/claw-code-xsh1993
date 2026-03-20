@@ -1,0 +1,42 @@
+{
+  "300502": {
+    "name": "新易盛",
+    "total_return": 0,
+    "trades": 0,
+    "win_trades": 0,
+    "max_single_return": 0,
+    "has_reentry": false
+  },
+  "300750": {
+    "name": "宁德时代",
+    "total_return": 0,
+    "trades": 0,
+    "win_trades": 0,
+    "max_single_return": 0,
+    "has_reentry": false
+  },
+  "300059": {
+    "name": "东方财富",
+    "total_return": 0,
+    "trades": 0,
+    "win_trades": 0,
+    "max_single_return": 0,
+    "has_reentry": false
+  },
+  "300166": {
+    "name": "东方国信",
+    "total_return": 0,
+    "trades": 0,
+    "win_trades": 0,
+    "max_single_return": 0,
+    "has_reentry": false
+  },
+  "300017": {
+    "name": "网宿科技",
+    "total_return": 0,
+    "trades": 0,
+    "win_trades": 0,
+    "max_single_return": 0,
+    "has_reentry": false
+  }
+}

@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 # 添加项目目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from breakout_strategy_v5 import backtest, print_summary, detect_board
+from breakout_strategy_v5_patched import backtest, print_summary, detect_board
 import tushare as ts
 import config
 
@@ -56,6 +56,23 @@ def get_ts_code(code_or_name: str) -> str:
         print(f"查询股票名称失败: {e}")
     
     return code_or_name
+
+
+def fetch_stock_name(ts_code: str) -> str:
+    """
+    获取股票名称
+    """
+    ts.set_token(config.TUSHARE_TOKEN)
+    pro = ts.pro_api()
+    
+    try:
+        df = pro.stock_basic(ts_code=ts_code, fields='ts_code,name')
+        if not df.empty:
+            return df.iloc[0]['name']
+    except Exception as e:
+        print(f"  警告: 获取股票名称失败: {e}")
+    
+    return ''
 
 
 def fetch_stock_data(ts_code: str, days: int = 180, start_date: datetime = None) -> pd.DataFrame:
@@ -103,6 +120,18 @@ def fetch_stock_data(ts_code: str, days: int = 180, start_date: datetime = None)
         df['high_adj'] = df['high']
         df['low_adj'] = df['low']
     
+    # 获取换手率数据（来自daily_basic接口）
+    try:
+        basic_df = pro.daily_basic(ts_code=ts_code, start_date=start_str, end_date=end_str)
+        if not basic_df.empty:
+            basic_df = basic_df.sort_values('trade_date').reset_index(drop=True)
+            df = df.merge(basic_df[['trade_date', 'turnover_rate']], on='trade_date', how='left')
+        else:
+            df['turnover_rate'] = None
+    except Exception as e:
+        print(f"  警告: 获取换手率数据失败: {e}")
+        df['turnover_rate'] = None
+    
     # 重命名列以匹配策略要求
     df['交易日期'] = pd.to_datetime(df['trade_date'])
     df['收盘价(元)'] = df['close']
@@ -112,6 +141,7 @@ def fetch_stock_data(ts_code: str, days: int = 180, start_date: datetime = None)
     df['最低价(元)'] = df['low_adj']
     df['涨跌幅(%)'] = df['pct_chg']
     df['成交量(万股)'] = df['vol'] / 100  # 手 -> 万股
+    df['换手率(%)'] = df['turnover_rate']  # 添加换手率字段
     
     return df
 
@@ -173,11 +203,20 @@ def main():
         stock_df = fetch_stock_data(ts_code, start_date=start_date)
         index_df = fetch_index_data(start_date=start_date)
         
+        # 获取股票名称
+        stock_name = fetch_stock_name(ts_code)
+        
+        # 对于已知的历史ST股，手动添加ST标记（因为当前可能已更名）
+        # 000506在2024-2025年期间为*ST中润，现已更名为招金黄金
+        if code == '000506' and 'ST' not in stock_name.upper():
+            stock_name = '*ST中润(历史)'
+            print(f"  注意: 该股票在回测期间为ST股，使用ST参数")
+        
         print(f"数据范围: {stock_df['交易日期'].min().strftime('%Y-%m-%d')} ~ {stock_df['交易日期'].max().strftime('%Y-%m-%d')}")
         print(f"共 {len(stock_df)} 个交易日")
         
         # 执行回测
-        trades = backtest(stock_df, code, index_df, verbose=True)
+        trades = backtest(stock_df, code, index_df, verbose=True, stock_name=stock_name)
         
         # 打印汇总
         print_summary(trades)

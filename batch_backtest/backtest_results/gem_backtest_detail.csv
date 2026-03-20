@@ -1,0 +1,36 @@
+﻿board,ts_code,name,industry,price_change_pct,max_gain_pct,strategy_return_pct,capture_ratio,scenario,passed,trade_count,win_rate,max_single_gain,max_single_loss,status,error_msg
+创业板,300476.SZ,胜宏科技,元器件,1477.51,1803.4,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300476_SZ.parquet
+创业板,300100.SZ,双林股份,汽车配件,265.5,629.89,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300100_SZ.parquet
+创业板,300436.SZ,广生堂,化学制药,245.41,567.26,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300436_SZ.parquet
+创业板,300870.SZ,欧陆通,电气设备,392.1,523.56,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300870_SZ.parquet
+创业板,300153.SZ,科泰电源,电气设备,261.12,519.88,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300153_SZ.parquet
+创业板,301377.SZ,鼎泰高科,机械基件,487.17,514.61,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\301377_SZ.parquet
+创业板,300469.SZ,信息发展,软件服务,323.29,508.22,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300469_SZ.parquet
+创业板,300548.SZ,长芯博创,通信设备,439.1,507.59,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300548_SZ.parquet
+创业板,300204.SZ,舒泰神,生物制药,170.23,503.36,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300204_SZ.parquet
+创业板,300475.SZ,香农芯创,元器件,340.73,497.92,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300475_SZ.parquet
+创业板,300641.SZ,正丹股份,化工原料,205.89,483.19,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300641_SZ.parquet
+创业板,300718.SZ,长盛轴承,机械基件,356.96,480.19,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300718_SZ.parquet
+创业板,301162.SZ,国能日新,软件服务,0.12,31.66,0.0,,股价持平,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\301162_SZ.parquet
+创业板,301090.SZ,华润材料,化工原料,-34.94,0.74,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\301090_SZ.parquet
+创业板,300983.SZ,尤安设计,建筑工程,-12.42,0.39,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300983_SZ.parquet
+创业板,300212.SZ,易华录,软件服务,-42.84,5.54,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300212_SZ.parquet
+创业板,300776.SZ,帝尔激光,专用机械,5.43,41.09,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300776_SZ.parquet
+创业板,300354.SZ,东华测试,电器仪表,-7.2,10.12,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300354_SZ.parquet
+创业板,300498.SZ,温氏股份,农业综合,-16.56,10.43,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300498_SZ.parquet
+创业板,300908.SZ,仲景食品,食品,-34.03,14.48,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300908_SZ.parquet
+创业板,300258.SZ,精锻科技,汽车配件,11.7,35.49,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300258_SZ.parquet
+创业板,301408.SZ,华人健康,医药商业,16.22,44.58,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\301408_SZ.parquet
+创业板,301069.SZ,凯盛新材,化工原料,31.19,45.45,0.0,0.0,上涨+亏损,False,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\301069_SZ.parquet
+创业板,300856.SZ,科思股份,日用化工,-77.38,50.15,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300856_SZ.parquet
+创业板,301030.SZ,仕净科技,环境保护,-70.54,54.89,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\301030_SZ.parquet
+创业板,301051.SZ,信濠光电,元器件,-68.89,0.0,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\301051_SZ.parquet
+创业板,300122.SZ,智飞生物,生物制药,-68.42,0.0,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300122_SZ.parquet
+创业板,301153.SZ,中科江南,软件服务,-68.29,0.0,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\301153_SZ.parquet
+创业板,300536.SZ,农尚环境,建筑工程,-67.79,0.13,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300536_SZ.parquet
+创业板,300795.SZ,米奥会展,文教休闲,-63.87,13.69,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300795_SZ.parquet
+创业板,300573.SZ,兴齐眼药,化学制药,-60.44,64.34,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300573_SZ.parquet
+创业板,301239.SZ,普瑞眼科,医疗保健,-59.79,0.0,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\301239_SZ.parquet
+创业板,300396.SZ,迪瑞医疗,医疗保健,-57.69,0.0,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300396_SZ.parquet
+创业板,300592.SZ,华凯易佰,互联网,-55.16,0.0,0.0,inf,下跌+盈利,True,0,0.0,0.0,0.0,error,缓存文件不存在: backtest_cache\300592_SZ.parquet
+创业板,300502.SZ,新易盛,通信设备,798.23,865.17,13.99,0.0175,上涨+盈利,False,4,50.0,16.31003869792852,-8.000000000000004,success,
